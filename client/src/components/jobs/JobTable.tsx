@@ -6,6 +6,7 @@ type Props = {
     loading?: boolean;
     onStageChange: (id: string, stage: JobStage) => void;
     onDelete: (id: string) => void;
+    onSelect: (app: JobApplication) => void;
 };
 
 function formatApplied(a: JobApplication): string {
@@ -30,6 +31,7 @@ export default function JobTable({
     loading,
     onStageChange,
     onDelete,
+    onSelect,
 }: Props) {
     if (loading) {
         return (
@@ -65,15 +67,22 @@ export default function JobTable({
                             apps.map((a) => {
                                 const when = formatApplied(a);
                                 return (
-                                    <tr key={a.id} className="border-b border-slate-800/80">
+                                    <tr
+                                        key={a.id}
+                                        className="border-b border-slate-800/80 hover:bg-slate-800/50 cursor-pointer transition-colors"
+                                        onClick={() => onSelect(a)}
+                                    >
                                         <td className="p-3">
-                                            <div className="font-medium">{a.company}</div>
+                                            <div className="font-medium text-slate-100">
+                                                {a.company}
+                                            </div>
                                             {a.job_url ? (
                                                 <a
                                                     href={a.job_url}
                                                     target="_blank"
                                                     rel="noreferrer"
                                                     className="text-xs text-blue-400 hover:underline"
+                                                    onClick={(e) => e.stopPropagation()}
                                                 >
                                                     Job link
                                                 </a>
@@ -92,7 +101,7 @@ export default function JobTable({
                                             ) : null}
                                         </td>
                                         <td className="p-3 text-slate-300">{a.source}</td>
-                                        <td className="p-3">
+                                        <td className="p-3" onClick={(e) => e.stopPropagation()}>
                                             <select
                                                 value={a.stage}
                                                 onChange={(e) =>
@@ -111,7 +120,7 @@ export default function JobTable({
                                             {a.tailored ? "tailored" : "cold"}
                                             {a.referral ? " · referral" : ""}
                                         </td>
-                                        <td className="p-3">
+                                        <td className="p-3" onClick={(e) => e.stopPropagation()}>
                                             <button
                                                 type="button"
                                                 onClick={() => onDelete(a.id)}

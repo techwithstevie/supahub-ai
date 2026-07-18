@@ -9,6 +9,7 @@ import MetricsCards from "../components/jobs/MetricsCards";
 import JobForm from "../components/jobs/JobForm";
 import JobTable from "../components/jobs/JobTable";
 import JobInsights from "../components/jobs/JobInsights";
+import JobDetailModal from "../components/jobs/JobDetailModal";
 
 const emptyMetrics = (): FunnelMetrics => ({
     total: 0,
@@ -44,6 +45,7 @@ export default function JobTrackerPage() {
     const [focus, setFocus] = useState(
         "Why am I not landing interviews and what should I change this week?"
     );
+    const [selected, setSelected] = useState<JobApplication | null>(null);
 
     const refresh = useCallback(async () => {
         setLoading(true);
@@ -68,6 +70,22 @@ export default function JobTrackerPage() {
     useEffect(() => {
         void refresh();
     }, [refresh]);
+
+    // Keep modal in sync if list refreshes while open
+    useEffect(() => {
+        if (!selected) return;
+        const next = apps.find((a) => a.id === selected.id) || null;
+        setSelected(next);
+    }, [apps, selected?.id]);
+
+    useEffect(() => {
+        if (!selected) return;
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key === "Escape") setSelected(null);
+        };
+        window.addEventListener("keydown", onKey);
+        return () => window.removeEventListener("keydown", onKey);
+    }, [selected]);
 
     const handleCreate = async (payload: Record<string, unknown>) => {
         const res = await fetch("/api/jobs", {
@@ -109,6 +127,7 @@ export default function JobTrackerPage() {
             );
             return;
         }
+        if (selected?.id === id) setSelected(null);
         await refresh();
     };
 
@@ -142,8 +161,8 @@ export default function JobTrackerPage() {
                 <div>
                     <h2 className="text-2xl font-semibold">Job Search Tracker</h2>
                     <p className="text-slate-400 text-sm mt-1">
-                        Log every application. Metrics expose the funnel. Agents diagnose
-                        why interviews are not converting.
+                        Log every application. Click a row to view the full LinkedIn post
+                        details. Metrics expose the funnel; agents diagnose conversion.
                     </p>
                 </div>
                 <button
@@ -190,9 +209,12 @@ export default function JobTrackerPage() {
                         loading={loading}
                         onStageChange={handleStageChange}
                         onDelete={handleDelete}
+                        onSelect={setSelected}
                     />
                 </div>
             </div>
+
+            <JobDetailModal app={selected} onClose={() => setSelected(null)} />
         </main>
     );
 }
