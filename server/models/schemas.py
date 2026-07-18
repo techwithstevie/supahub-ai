@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from enum import Enum
 from typing import Any, Optional
 
 from pydantic import BaseModel, Field
@@ -74,3 +75,30 @@ class ResumeResponse(BaseModel):
     resume_markdown: str
     agent_log: list[str] = Field(default_factory=list)
     raw_skills: dict[str, Any] = Field(default_factory=dict)
+
+
+class ResumeSection(str, Enum):
+    header = "header"          # name, contact, title, headline_tech
+    summary = "summary"
+    skills = "skills"
+    experience = "experience"
+    projects = "projects"
+    education = "education"
+
+
+class RefineSectionRequest(BaseModel):
+    resume: ResumeDocument
+    section: ResumeSection
+    prompt: str = Field(..., min_length=1, max_length=4000)
+
+
+class UpdateResumeRequest(BaseModel):
+    """Full document replace after manual edits."""
+    resume: ResumeDocument
+
+
+class RenderedResumeResponse(BaseModel):
+    resume: ResumeDocument
+    resume_html: str
+    resume_markdown: str
+    agent_log: list[str] = Field(default_factory=list)

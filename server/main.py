@@ -8,8 +8,17 @@ from fastapi.responses import HTMLResponse
 
 from config import settings
 from graph.pipeline import ResumeState, build_pipeline
-from models.schemas import ResumeDocument, ResumeRequest, ResumeResponse
+from graph.section_refiner import refine_section
+from models.schemas import (
+    RefineSectionRequest,
+    RenderedResumeResponse,
+    ResumeDocument,
+    ResumeRequest,
+    ResumeResponse,
+    UpdateResumeRequest,
+)
 from utils.github_fetcher import fetch_user_repos
+from utils.resume_template import render_html, render_markdown
 
 app = FastAPI(title="SupaHub AI")
 
@@ -22,6 +31,14 @@ app.add_middleware(
 )
 
 pipeline = build_pipeline()
+
+
+def _render(doc: ResumeDocument) -> RenderedResumeResponse:
+    return RenderedResumeResponse(
+        resume=doc,
+        resume_html=render_html(doc),
+        resume_markdown=render_markdown(doc),
+    )
 
 
 @app.get("/health")
@@ -81,8 +98,8 @@ async def generate_resume(request: ResumeRequest) -> ResumeResponse:
 
     return ResumeResponse(
         resume=doc,
-        resume_html=result.get("resume_html") or "",
-        resume_markdown=result.get("resume_markdown") or "",
+        resume_html=result.get("resume_html") or render_html(doc),
+        resume_markdown=result.get("resume_markdown") or render_markdown(doc),
         raw_skills=result.get("skills") or {},
         agent_log=[
             "repo_analyst ✓",
@@ -91,6 +108,39 @@ async def generate_resume(request: ResumeRequest) -> ResumeResponse:
             "resume_assembler ✓",
         ],
     )
+
+
+@app.post("/refine-section", response_model=RenderedResumeResponse)
+async def refine_resume_section(
+    request: RefineSectionRequest,
+) -> RenderedResumeResponse:
+    prompt = request.prompt.strip()
+    if not prompt:
+        raise HTTPException(status_code=400, detail="prompt is required")
+
+    try:
+        updated = refine_section(request.resume, request.section, prompt)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Section refine failed: {exc}",
+        ) from exc
+
+    out = _render(updated)
+    out.agent_log = [f"refine:{request.section.value} ✓"]
+    return out
+
+
+@app.post("/update-resume", response_model=RenderedResumeResponse)
+async def update_resume(request: UpdateResumeRequest) -> RenderedResumeResponse:
+    """Apply manual edits and re-render HTML/Markdown."""
+    try:
+        doc = ResumeDocument.model_validate(request.resume.model_dump())
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid resume: {exc}") from exc
+    out = _render(doc)
+    out.agent_log = ["manual_update ✓"]
+    return out
 
 
 @app.post("/generate-resume/html", response_class=HTMLResponse)
