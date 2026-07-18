@@ -29,23 +29,30 @@ class ExperienceItem(BaseModel):
     start: str = ""
     end: str = "Present"
     bullets: list[str] = Field(default_factory=list)
+    company_url: str = ""
+
+
+class ProjectLink(BaseModel):
+    label: str = "Code"
+    url: str = ""
 
 
 class ProjectItem(BaseModel):
     name: str
     stack: list[str] = Field(default_factory=list)
-    links: list[str] = Field(default_factory=list)
+    links: list[ProjectLink] = Field(default_factory=list)
     bullets: list[str] = Field(default_factory=list)
+    repo_url: str = ""
 
 
 class EducationItem(BaseModel):
     school: str
     credential: str
+    url: str = ""
+    year: str = ""
 
 
 class ResumeDocument(BaseModel):
-    """Matches professional single-column ATS resume (Stephen sample)."""
-
     full_name: str = ""
     phone: str = ""
     email: str = ""

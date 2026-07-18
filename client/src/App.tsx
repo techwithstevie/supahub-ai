@@ -48,9 +48,7 @@ export default function App() {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         const detail =
-          typeof data.detail === "string"
-            ? data.detail
-            : `HTTP ${res.status}`;
+          typeof data.detail === "string" ? data.detail : `HTTP ${res.status}`;
         throw new Error(detail);
       }
 

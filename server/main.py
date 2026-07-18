@@ -41,7 +41,10 @@ async def generate_resume(request: ResumeRequest) -> ResumeResponse:
             request.github_token,
         )
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=f"GitHub fetch failed: {exc}") from exc
+        raise HTTPException(
+            status_code=400,
+            detail=f"GitHub fetch failed: {exc}",
+        ) from exc
 
     user: dict[str, Any] = github_data.get("user") or {}
 
@@ -61,8 +64,8 @@ async def generate_resume(request: ResumeRequest) -> ResumeResponse:
             "linkedin": request.linkedin or "",
             "portfolio": request.portfolio or user.get("blog") or "",
             "username": request.github_username,
-            "location": request.location or user.get("location") or "",
             "github": f"https://github.com/{request.github_username}",
+            "location": request.location or user.get("location") or "",
         },
     }
 

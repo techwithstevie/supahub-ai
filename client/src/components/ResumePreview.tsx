@@ -68,6 +68,7 @@ export default function ResumePreview({ html, markdown, loading }: Props) {
                         title="Resume"
                         srcDoc={html}
                         className="w-full h-[75vh] border-0 bg-white"
+                        sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation"
                     />
                 </div>
             ) : null}

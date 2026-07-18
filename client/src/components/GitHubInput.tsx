@@ -13,9 +13,9 @@ export default function GitHubInput({ onGenerate, loading }: Props) {
         full_name: "",
         email: "",
         phone: "",
-        target_role: "Software Engineer",
         linkedin: "",
         portfolio: "",
+        target_role: "Senior Software Engineer",
     });
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -51,12 +51,22 @@ export default function GitHubInput({ onGenerate, loading }: Props) {
             {
                 name: "phone",
                 label: "Phone",
-                placeholder: "+1 (555) 000-0000",
+                placeholder: "732-575-9802",
+            },
+            {
+                name: "linkedin",
+                label: "LinkedIn (URL or username)",
+                placeholder: "https://linkedin.com/in/you",
+            },
+            {
+                name: "portfolio",
+                label: "Portfolio URL",
+                placeholder: "https://stephenprahl.vercel.app",
             },
             {
                 name: "target_role",
                 label: "Target Role",
-                placeholder: "Senior AI Engineer",
+                placeholder: "Senior Software Engineer",
             },
         ];
 
@@ -67,7 +77,8 @@ export default function GitHubInput({ onGenerate, loading }: Props) {
                     Generate Your Resume
                 </h2>
                 <p className="text-sm text-slate-400 mt-1">
-                    Agents analyze your GitHub and build a recruiter-ready resume.
+                    Agents analyze your GitHub and build a recruiter-ready resume with
+                    working links.
                 </p>
             </div>
 

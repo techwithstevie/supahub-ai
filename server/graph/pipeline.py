@@ -12,6 +12,7 @@ from models.schemas import (
     EducationItem,
     ExperienceItem,
     ProjectItem,
+    ProjectLink,
     ResumeDocument,
     SkillCategory,
 )
@@ -65,7 +66,6 @@ def _parse_json(text: str) -> Any:
             if not line.strip().startswith("```")
         ]
         cleaned = "\n".join(lines).strip()
-    # salvage first { ... } or [ ... ]
     for open_c, close_c in (("{", "}"), ("[", "]")):
         start = cleaned.find(open_c)
         end = cleaned.rfind(close_c)
@@ -75,6 +75,52 @@ def _parse_json(text: str) -> Any:
             except json.JSONDecodeError:
                 pass
     return json.loads(cleaned)
+
+
+def _repo_url_map(raw_data: dict[str, Any]) -> dict[str, str]:
+    mapping: dict[str, str] = {}
+    for repo in raw_data.get("repos") or []:
+        name = str(repo.get("name") or "").lower()
+        url = str(repo.get("url") or "")
+        if name and url:
+            mapping[name] = url
+    return mapping
+
+
+def _normalize_project_links(row: dict[str, Any], repo_map: dict[str, str]) -> list[ProjectLink]:
+    links: list[ProjectLink] = []
+    name = str(row.get("name") or "")
+    repo = str(
+        row.get("repo_url")
+        or row.get("url")
+        or row.get("html_url")
+        or repo_map.get(name.lower())
+        or ""
+    )
+
+    raw_links = row.get("links") or []
+    if isinstance(raw_links, list):
+        for item in raw_links:
+            if isinstance(item, dict) and item.get("url"):
+                links.append(
+                    ProjectLink(
+                        label=str(item.get("label") or "Link"),
+                        url=str(item["url"]),
+                    )
+                )
+            elif isinstance(item, str) and item.startswith("http"):
+                links.append(ProjectLink(label="Link", url=item))
+            elif isinstance(item, str) and repo:
+                links.append(ProjectLink(label=item or "Code", url=repo))
+
+    if repo and not any(l.url == repo for l in links):
+        links.insert(0, ProjectLink(label="Code", url=repo))
+
+    live = str(row.get("live_url") or row.get("homepage") or "")
+    if live:
+        links.append(ProjectLink(label="Live", url=live))
+
+    return links
 
 
 def repo_analyst_node(state: ResumeState) -> ResumeState:
@@ -92,6 +138,7 @@ Return ONLY JSON:
       "languages": [],
       "topics": [],
       "stars": 0,
+      "url": "",
       "why_strong": "",
       "impact_hints": []
     }}
@@ -99,7 +146,7 @@ Return ONLY JSON:
   "seniority_signal": "",
   "domains": []
 }}
-Pick at most 5 strongest non-toy projects. Prefer production-looking stacks."""
+Pick at most 5 strongest non-toy projects. Always copy each project's url field from input when present."""
     try:
         analysis = _parse_json(_invoke_text(prompt))
         if not isinstance(analysis, dict):
@@ -123,17 +170,17 @@ def skills_extractor_node(state: ResumeState) -> ResumeState:
         langs.update(repo.get("languages") or [])
         topics.update(repo.get("topics") or [])
 
-    prompt = f"""You write SKILLS sections for senior engineering resumes (ATS, one page feel).
+    prompt = f"""You write SKILLS sections for senior engineering resumes (ATS).
 Target role: {state["target_role"]}
 Languages seen: {sorted(langs)}
 Topics seen: {sorted(topics)}
 Analysis: {json.dumps(analysis)[:3000]}
 
-Return ONLY JSON with categories EXACTLY like a premium resume:
+Return ONLY JSON:
 {{
-  "headline_tech": ["React Native", "TypeScript", "Python", "..."],
+  "headline_tech": ["React Native", "TypeScript", "Python"],
   "skills": [
-    {{"category": "Languages", "items": ["TypeScript", "JavaScript", "Python"]}},
+    {{"category": "Languages", "items": []}},
     {{"category": "Mobile", "items": []}},
     {{"category": "AI & ML", "items": []}},
     {{"category": "Frontend", "items": []}},
@@ -142,11 +189,7 @@ Return ONLY JSON with categories EXACTLY like a premium resume:
     {{"category": "Tooling", "items": []}}
   ]
 }}
-Rules:
-- Only real, credible skills inferred from evidence
-- 4–12 items per category max; drop empty categories
-- headline_tech: 5–8 flagship technologies for the title line
-- No soft skills, no fluff"""
+Rules: only credible skills; 4-12 items/category; drop empty categories; headline_tech 5-8 items."""
     try:
         parsed = _parse_json(_invoke_text(prompt))
         if not isinstance(parsed, dict):
@@ -164,7 +207,6 @@ Rules:
 
 
 def experience_writer_node(state: ResumeState) -> ResumeState:
-    """Projects become PROJECTS; synthesize EXPERIENCE-style bullets from repo work."""
     analysis = state["raw_data"].get("analysis", {})
     top = analysis.get("top_projects") or state["raw_data"].get("repos", [])[:5]
     user = state["user_info"]
@@ -174,48 +216,43 @@ def experience_writer_node(state: ResumeState) -> ResumeState:
 Target role: {role}
 Candidate: {user.get("full_name", "")}
 
-GitHub project evidence:
+GitHub project evidence (include url on every project):
 {json.dumps(top, indent=2)[:8000]}
 
 Return ONLY JSON:
 {{
-  "summary": "2-3 sentences, first person implied (no I), quantified where possible, like: Full-stack, mobile, and AI engineer with ...",
+  "summary": "2-3 sentences, no first-person pronouns, quantified where possible",
   "experience": [
     {{
-      "company": "Derived from strongest project/org or 'Independent / Open Source'",
+      "company": "Independent / Open Source",
+      "company_url": "",
       "title": "{role}",
       "location": "Remote",
-      "start": "YYYY or Mon YYYY",
+      "start": "2023",
       "end": "Present",
-      "bullets": [
-        "Built ...",
-        "Engineered ...",
-        "Improved ..."
-      ]
+      "bullets": ["Built ...", "Engineered ..."]
     }}
   ],
   "projects": [
     {{
       "name": "ProjectName",
-      "stack": ["Python", "Ollama"],
-      "links": ["Code"],
-      "bullets": [
-        "Built ...",
-        "Engineered ..."
-      ]
+      "stack": ["Python", "TypeScript"],
+      "repo_url": "https://github.com/user/repo",
+      "links": [
+        {{"label": "Code", "url": "https://github.com/user/repo"}},
+        {{"label": "Live", "url": "https://example.com"}}
+      ],
+      "bullets": ["Built ...", "Engineered ..."]
     }}
   ]
 }}
 
-HARD RULES for bullets (match Fortune-500 / senior SWE resumes):
-- Start with strong verbs: Built, Engineered, Architected, Delivered, Implemented, Optimized
-- Specific tech + outcome; no generic "worked on"
-- 1 line each, ~12–22 words
-- 2–4 bullets per experience entry; 2–3 per project
-- 2–4 experience entries max (group related work if needed)
-- 3–5 projects max (best only)
-- Never invent FAANG employers; if only GitHub, use honest labels (Contract / Independent / Open Source / Personal Product)
-- summary: no first-person pronouns; quote-ready professional blurb"""
+HARD RULES:
+- Start bullets with Built/Engineered/Architected/Delivered/Implemented/Optimized
+- 2-4 experience entries; 3-5 projects
+- Always set repo_url from evidence url when available
+- Never invent FAANG employers
+- summary: quote-ready professional blurb"""
     try:
         parsed = _parse_json(_invoke_text(prompt))
         if not isinstance(parsed, dict):
@@ -225,13 +262,21 @@ HARD RULES for bullets (match Fortune-500 / senior SWE resumes):
     except Exception:
         state["experience_bullets"] = []
         state["draft"] = {
-            "summary": f"{role} building production software from open-source and shipped projects.",
+            "summary": (
+                f"{role} with hands-on experience shipping full-stack, mobile, "
+                "and AI-integrated systems from real repositories."
+            ),
             "experience": [],
             "projects": [
                 {
                     "name": p.get("name", "Project"),
                     "stack": p.get("languages") or [],
-                    "links": ["Code"],
+                    "repo_url": p.get("url") or "",
+                    "links": (
+                        [{"label": "Code", "url": p.get("url")}]
+                        if p.get("url")
+                        else []
+                    ),
                     "bullets": [
                         p.get("description")
                         or f"Developed {p.get('name', 'project')} using modern tooling."
@@ -247,17 +292,17 @@ def resume_assembler_node(state: ResumeState) -> ResumeState:
     user = state["user_info"]
     skills_payload = state.get("skills") or {}
     draft = state.get("draft") or {}
+    repo_map = _repo_url_map(state.get("raw_data") or {})
 
-    # Optional LLM polish pass for summary only if thin
     summary = (draft.get("summary") or "").strip()
     if len(summary) < 40:
         summary = (
             f"{state['target_role']} with hands-on experience across full-stack, "
-            f"mobile, and AI-integrated systems, shipping production-quality work "
-            f"from real repositories and iterative delivery."
+            "mobile, and AI-integrated systems, shipping production-quality work "
+            "from real repositories and iterative delivery."
         )
 
-    skill_cats = []
+    skill_cats: list[SkillCategory] = []
     for row in skills_payload.get("skills") or []:
         if isinstance(row, dict) and row.get("items"):
             skill_cats.append(
@@ -267,7 +312,7 @@ def resume_assembler_node(state: ResumeState) -> ResumeState:
                 )
             )
 
-    experience = []
+    experience: list[ExperienceItem] = []
     for row in draft.get("experience") or state.get("experience_bullets") or []:
         if not isinstance(row, dict):
             continue
@@ -279,18 +324,33 @@ def resume_assembler_node(state: ResumeState) -> ResumeState:
                 start=str(row.get("start") or ""),
                 end=str(row.get("end") or "Present"),
                 bullets=[str(b) for b in (row.get("bullets") or []) if b],
+                company_url=str(row.get("company_url") or ""),
             )
         )
 
-    projects = []
+    projects: list[ProjectItem] = []
     for row in draft.get("projects") or []:
         if not isinstance(row, dict):
             continue
+        name = str(row.get("name") or "Project")
+        repo_url = str(
+            row.get("repo_url")
+            or row.get("url")
+            or repo_map.get(name.lower())
+            or ""
+        )
         projects.append(
             ProjectItem(
-                name=str(row.get("name") or "Project"),
-                stack=[str(s) for s in (row.get("stack") or [])],
-                links=[str(l) for l in (row.get("links") or ["Code"])],
+                name=name,
+                stack=[
+                    str(s)
+                    for s in (row.get("stack") or row.get("languages") or [])
+                ],
+                repo_url=repo_url,
+                links=_normalize_project_links(
+                    {**row, "repo_url": repo_url, "name": name},
+                    repo_map,
+                ),
                 bullets=[str(b) for b in (row.get("bullets") or []) if b],
             )
         )
@@ -299,23 +359,30 @@ def resume_assembler_node(state: ResumeState) -> ResumeState:
         EducationItem(
             school="Coding Temple",
             credential="Software Engineering Certificate",
-        )
+            url="https://www.codingtemple.com/",
+        ),
+        EducationItem(
+            school="Jackson Memorial High School",
+            credential="High School Diploma",
+            url="https://www.jacksonsd.org/",
+        ),
     ]
-    # allow override from user_info later
+
+    github = str(
+        user.get("github")
+        or (
+            f"https://github.com/{user.get('username')}"
+            if user.get("username")
+            else ""
+        )
+    )
 
     doc = ResumeDocument(
         full_name=str(user.get("full_name") or "Software Engineer"),
         phone=str(user.get("phone") or ""),
         email=str(user.get("email") or ""),
         linkedin=str(user.get("linkedin") or ""),
-        github=str(
-            user.get("github")
-            or (
-                f"https://github.com/{user.get('username')}"
-                if user.get("username")
-                else ""
-            )
-        ),
+        github=github,
         portfolio=str(user.get("portfolio") or ""),
         target_title=str(state.get("target_role") or "Senior Software Engineer"),
         headline_tech=[
@@ -328,7 +395,6 @@ def resume_assembler_node(state: ResumeState) -> ResumeState:
         education=education,
     )
 
-    # Final structure enforcement via model_dump
     state["resume_doc"] = doc.model_dump()
     state["resume_html"] = render_html(doc)
     state["resume_markdown"] = render_markdown(doc)

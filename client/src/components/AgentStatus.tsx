@@ -17,7 +17,10 @@ export default function AgentStatus({ log }: Props) {
                 {log.map((entry, i) => {
                     const key = entry.split(" ")[0];
                     return (
-                        <div key={`${entry}-${i}`} className="flex items-center gap-3 text-sm">
+                        <div
+                            key={`${entry}-${i}`}
+                            className="flex items-center gap-3 text-sm"
+                        >
                             <span className="text-lg">{icons[key] || "🤖"}</span>
                             <span className="text-slate-300">{entry}</span>
                             <span className="ml-auto text-green-400 text-xs font-mono">
