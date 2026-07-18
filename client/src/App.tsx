@@ -4,13 +4,18 @@ import ResumePreview from "./components/ResumePreview";
 import AgentStatus from "./components/AgentStatus";
 import ResumeEditor from "./components/ResumeEditor";
 import SectionRefiner from "./components/SectionRefiner";
+import JobTrackerPage from "./pages/JobTrackerPage";
 import type { GenerateForm } from "./components/GitHubInput";
 import type { ResumeDocument, ResumeSection } from "./types/resume";
 import { emptyResume } from "./types/resume";
 
+type Tab = "resume" | "jobs";
 type Mode = "preview" | "edit";
 
 export default function App() {
+  const [tab, setTab] = useState<Tab>("resume");
+
+  // ── Resume studio state (unchanged behavior) ──────────
   const [resume, setResume] = useState<ResumeDocument>(emptyResume());
   const [html, setHtml] = useState("");
   const [markdown, setMarkdown] = useState("");
@@ -62,15 +67,17 @@ export default function App() {
             formData.target_role.trim() || "Senior Software Engineer",
         }),
       });
+
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error(
-          typeof data.detail === "string" ? data.detail : `HTTP ${res.status}`
-        );
+        const detail =
+          typeof data.detail === "string" ? data.detail : `HTTP ${res.status}`;
+        throw new Error(detail);
       }
+
       applyPayload(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Generate failed");
+      setError(err instanceof Error ? err.message : "Failed to generate");
     } finally {
       setLoading(false);
     }
@@ -130,7 +137,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-white">
-      <header className="border-b border-slate-800 px-6 py-5 flex items-center justify-between gap-3">
+      <header className="border-b border-slate-800 px-6 py-5 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center font-bold text-sm">
             SH
@@ -139,67 +146,97 @@ export default function App() {
             SupaHub <span className="text-blue-400">AI</span>
           </h1>
         </div>
-        {hasResume && (
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => setMode("preview")}
-              className={`text-xs px-3 py-1.5 rounded-lg ${mode === "preview"
-                  ? "bg-blue-600 text-white"
-                  : "bg-slate-800 text-slate-300"
-                }`}
-            >
-              Preview
-            </button>
-            <button
-              type="button"
-              onClick={() => setMode("edit")}
-              className={`text-xs px-3 py-1.5 rounded-lg ${mode === "edit"
-                  ? "bg-blue-600 text-white"
-                  : "bg-slate-800 text-slate-300"
-                }`}
-            >
-              Manual Edit
-            </button>
-          </div>
-        )}
-      </header>
 
-      <main className="max-w-7xl mx-auto px-6 py-10 grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <div className="space-y-6">
-          <GitHubInput onGenerate={handleGenerate} loading={loading} />
-          {error && (
-            <div className="rounded-xl border border-red-800 bg-red-950/50 px-4 py-3 text-sm text-red-300">
-              {error}
+        <div className="flex flex-wrap items-center gap-2">
+          <nav className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setTab("resume")}
+              className={`text-sm px-4 py-2 rounded-lg ${tab === "resume"
+                  ? "bg-blue-600 text-white"
+                  : "bg-slate-800 text-slate-300"
+                }`}
+            >
+              Resume Studio
+            </button>
+            <button
+              type="button"
+              onClick={() => setTab("jobs")}
+              className={`text-sm px-4 py-2 rounded-lg ${tab === "jobs"
+                  ? "bg-blue-600 text-white"
+                  : "bg-slate-800 text-slate-300"
+                }`}
+            >
+              Job Tracker
+            </button>
+          </nav>
+
+          {tab === "resume" && hasResume && (
+            <div className="flex gap-2 ml-2 pl-2 border-l border-slate-700">
+              <button
+                type="button"
+                onClick={() => setMode("preview")}
+                className={`text-xs px-3 py-1.5 rounded-lg ${mode === "preview"
+                    ? "bg-blue-600 text-white"
+                    : "bg-slate-800 text-slate-300"
+                  }`}
+              >
+                Preview
+              </button>
+              <button
+                type="button"
+                onClick={() => setMode("edit")}
+                className={`text-xs px-3 py-1.5 rounded-lg ${mode === "edit"
+                    ? "bg-blue-600 text-white"
+                    : "bg-slate-800 text-slate-300"
+                  }`}
+              >
+                Manual Edit
+              </button>
             </div>
           )}
-          {agentLog.length > 0 && <AgentStatus log={agentLog} />}
-          {hasResume && (
-            <SectionRefiner
-              disabled={loading || refining || saving}
-              refining={refining}
-              onRefine={handleRefineSection}
-            />
-          )}
         </div>
+      </header>
 
-        <div className="space-y-4">
-          {mode === "preview" ? (
-            <ResumePreview
-              html={html}
-              markdown={markdown}
-              loading={loading || refining}
-            />
-          ) : (
-            <ResumeEditor
-              resume={resume}
-              saving={saving}
-              onSave={handleSaveManual}
-              onCancel={() => setMode("preview")}
-            />
-          )}
-        </div>
-      </main>
+      {tab === "jobs" ? (
+        <JobTrackerPage />
+      ) : (
+        <main className="max-w-7xl mx-auto px-6 py-10 grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <div className="space-y-6">
+            <GitHubInput onGenerate={handleGenerate} loading={loading} />
+            {error && (
+              <div className="rounded-xl border border-red-800 bg-red-950/50 px-4 py-3 text-sm text-red-300">
+                {error}
+              </div>
+            )}
+            {agentLog.length > 0 && <AgentStatus log={agentLog} />}
+            {hasResume && (
+              <SectionRefiner
+                disabled={loading || refining || saving}
+                refining={refining}
+                onRefine={handleRefineSection}
+              />
+            )}
+          </div>
+
+          <div className="space-y-4">
+            {mode === "preview" ? (
+              <ResumePreview
+                html={html}
+                markdown={markdown}
+                loading={loading || refining}
+              />
+            ) : (
+              <ResumeEditor
+                resume={resume}
+                saving={saving}
+                onSave={handleSaveManual}
+                onCancel={() => setMode("preview")}
+              />
+            )}
+          </div>
+        </main>
+      )}
     </div>
   );
 }

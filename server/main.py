@@ -7,8 +7,21 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 
 from config import settings
+from graph.job_analyst import analyze_job_search
 from graph.pipeline import ResumeState, build_pipeline
 from graph.section_refiner import refine_section
+
+from models.job_schemas import (
+    AnalyzeJobSearchRequest,
+    AnalyzeJobSearchResponse,
+    JobApplication,
+    JobApplicationCreate,
+    JobApplicationUpdate,
+    JobMetricsResponse,
+    ParseJobUrlRequest,
+    ParseJobUrlResponse,
+)
+
 from models.schemas import (
     RefineSectionRequest,
     RenderedResumeResponse,
@@ -17,8 +30,10 @@ from models.schemas import (
     ResumeResponse,
     UpdateResumeRequest,
 )
+from utils import job_store
 from utils.github_fetcher import fetch_user_repos
 from utils.resume_template import render_html, render_markdown
+from utils.job_url_parser import parse_job_url
 
 app = FastAPI(title="SupaHub AI")
 
@@ -48,6 +63,9 @@ def health() -> dict[str, str]:
         "model": settings.ollama_model,
         "ollama_base_url": settings.ollama_base_url,
     }
+
+
+# ── Resume ──────────────────────────────────────────────
 
 
 @app.post("/generate-resume", response_model=ResumeResponse)
@@ -117,7 +135,6 @@ async def refine_resume_section(
     prompt = request.prompt.strip()
     if not prompt:
         raise HTTPException(status_code=400, detail="prompt is required")
-
     try:
         updated = refine_section(request.resume, request.section, prompt)
     except Exception as exc:
@@ -125,7 +142,6 @@ async def refine_resume_section(
             status_code=500,
             detail=f"Section refine failed: {exc}",
         ) from exc
-
     out = _render(updated)
     out.agent_log = [f"refine:{request.section.value} ✓"]
     return out
@@ -133,7 +149,6 @@ async def refine_resume_section(
 
 @app.post("/update-resume", response_model=RenderedResumeResponse)
 async def update_resume(request: UpdateResumeRequest) -> RenderedResumeResponse:
-    """Apply manual edits and re-render HTML/Markdown."""
     try:
         doc = ResumeDocument.model_validate(request.resume.model_dump())
     except Exception as exc:
@@ -147,3 +162,73 @@ async def update_resume(request: UpdateResumeRequest) -> RenderedResumeResponse:
 async def generate_resume_html(request: ResumeRequest) -> HTMLResponse:
     payload = await generate_resume(request)
     return HTMLResponse(content=payload.resume_html)
+
+
+# ── Job tracker ─────────────────────────────────────────
+
+
+@app.get("/jobs/metrics", response_model=JobMetricsResponse)
+def get_job_metrics() -> JobMetricsResponse:
+    apps = job_store.list_applications()
+    metrics = job_store.compute_metrics(apps)
+    return JobMetricsResponse(
+        metrics=metrics,
+        applications=apps,
+        insights_ready=metrics.applied_count >= 3,
+    )
+
+
+@app.post("/jobs/analyze", response_model=AnalyzeJobSearchResponse)
+def post_job_analyze(payload: AnalyzeJobSearchRequest) -> AnalyzeJobSearchResponse:
+    apps = job_store.list_applications()
+    metrics = job_store.compute_metrics(apps)
+    if metrics.total == 0:
+        raise HTTPException(
+            status_code=400,
+            detail="Add job applications before running analysis",
+        )
+    return analyze_job_search(
+        metrics=metrics,
+        applications=apps,
+        focus=payload.focus,
+        include_notes=payload.include_notes,
+    )
+
+
+@app.get("/jobs", response_model=list[JobApplication])
+def get_jobs() -> list[JobApplication]:
+    return job_store.list_applications()
+
+
+@app.post("/jobs", response_model=JobApplication)
+def post_job(payload: JobApplicationCreate) -> JobApplication:
+    return job_store.create_application(payload)
+
+
+@app.patch("/jobs/{job_id}", response_model=JobApplication)
+def patch_job(job_id: str, payload: JobApplicationUpdate) -> JobApplication:
+    try:
+        return job_store.update_application(job_id, payload)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Application not found") from exc
+
+
+@app.delete("/jobs/{job_id}")
+def remove_job(job_id: str) -> dict[str, bool]:
+    try:
+        job_store.delete_application(job_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Application not found") from exc
+    return {"ok": True}
+
+@app.post("/jobs/parse-url", response_model=ParseJobUrlResponse)
+async def parse_job_posting_url(payload: ParseJobUrlRequest) -> ParseJobUrlResponse:
+    try:
+        return await parse_job_url(payload.url)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Failed to parse job URL: {exc}",
+        ) from exc
