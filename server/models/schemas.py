@@ -1,5 +1,6 @@
-from pydantic import BaseModel
-from typing import List, Optional
+from pydantic import BaseModel, Field
+from typing import Any, Optional
+
 
 class ResumeRequest(BaseModel):
     github_username: str
@@ -9,10 +10,9 @@ class ResumeRequest(BaseModel):
     phone: Optional[str] = None
     target_role: Optional[str] = "Software Engineer"
 
-class AgentState(BaseModel):
-    username: str
-    raw_data: dict = {}
-    skills: List[str] = []
-    experience_bullets: List[dict] = []
-    resume_markdown: str = ""
-    status: str = "idle"
+
+class ResumeResponse(BaseModel):
+    resume_markdown: str
+    skills: dict[str, Any] = Field(default_factory=dict)
+    projects: list[Any] = Field(default_factory=list)
+    agent_log: list[str] = Field(default_factory=list)

@@ -1,33 +1,53 @@
-import httpx
-from typing import Optional
+from typing import Any, Optional
 
-async def fetch_user_repos(username: str, token: Optional[str] = None):
-    headers = {"Authorization": f"token {token}"} if token else {}
-    async with httpx.AsyncClient() as client:
-        repos_res = await client.get(
-            f"https://api.github.com/users/{username}/repos?sort=updated&per_page=20",
-            headers=headers
-        )
+import httpx
+
+
+async def fetch_user_repos(
+    username: str, token: Optional[str] = None
+) -> dict[str, Any]:
+    headers: dict[str, str] = {"Accept": "application/vnd.github+json"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
         user_res = await client.get(
             f"https://api.github.com/users/{username}",
-            headers=headers
+            headers=headers,
         )
-        repos = repos_res.json()
+        user_res.raise_for_status()
         user = user_res.json()
 
-        repo_details = []
+        repos_res = await client.get(
+            f"https://api.github.com/users/{username}/repos",
+            params={"sort": "updated", "per_page": 20},
+            headers=headers,
+        )
+        repos_res.raise_for_status()
+        repos = repos_res.json()
+
+        repo_details: list[dict[str, Any]] = []
         for repo in repos:
             if repo.get("fork"):
                 continue
-            langs_res = await client.get(repo["languages_url"], headers=headers)
-            repo_details.append({
-                "name": repo["name"],
-                "description": repo.get("description", ""),
-                "languages": list(langs_res.json().keys()),
-                "stars": repo["stargazers_count"],
-                "topics": repo.get("topics", []),
-                "updated_at": repo["updated_at"],
-                "url": repo["html_url"]
-            })
+
+            languages: list[str] = []
+            languages_url = repo.get("languages_url")
+            if languages_url:
+                langs_res = await client.get(languages_url, headers=headers)
+                if langs_res.status_code == 200:
+                    languages = list(langs_res.json().keys())
+
+            repo_details.append(
+                {
+                    "name": repo.get("name", ""),
+                    "description": repo.get("description") or "",
+                    "languages": languages,
+                    "stars": repo.get("stargazers_count", 0),
+                    "topics": repo.get("topics") or [],
+                    "updated_at": repo.get("updated_at", ""),
+                    "url": repo.get("html_url", ""),
+                }
+            )
 
     return {"user": user, "repos": repo_details}
