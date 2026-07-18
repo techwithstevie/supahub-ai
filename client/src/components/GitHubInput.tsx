@@ -14,6 +14,8 @@ export default function GitHubInput({ onGenerate, loading }: Props) {
         email: "",
         phone: "",
         target_role: "Software Engineer",
+        linkedin: "",
+        portfolio: "",
     });
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {

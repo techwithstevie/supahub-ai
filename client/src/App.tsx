@@ -9,23 +9,26 @@ export type GenerateForm = {
   full_name: string;
   email: string;
   phone: string;
+  linkedin: string;
+  portfolio: string;
   target_role: string;
 };
 
 export default function App() {
-  const [resume, setResume] = useState("");
+  const [html, setHtml] = useState("");
+  const [markdown, setMarkdown] = useState("");
   const [agentLog, setAgentLog] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   const handleGenerate = async (formData: GenerateForm) => {
     setLoading(true);
-    setResume("");
+    setHtml("");
+    setMarkdown("");
     setAgentLog([]);
     setError("");
 
     try {
-      // Uses Vite proxy → http://127.0.0.1:8000/generate-resume
       const res = await fetch("/api/generate-resume", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -35,28 +38,27 @@ export default function App() {
           full_name: formData.full_name.trim() || null,
           email: formData.email.trim() || null,
           phone: formData.phone.trim() || null,
-          target_role: formData.target_role.trim() || "Software Engineer",
+          linkedin: formData.linkedin.trim() || null,
+          portfolio: formData.portfolio.trim() || null,
+          target_role:
+            formData.target_role.trim() || "Senior Software Engineer",
         }),
       });
 
       const data = await res.json().catch(() => ({}));
-
       if (!res.ok) {
         const detail =
           typeof data.detail === "string"
             ? data.detail
-            : Array.isArray(data.detail)
-              ? data.detail.map((d: { msg?: string }) => d.msg).join(", ")
-              : `HTTP ${res.status}`;
+            : `HTTP ${res.status}`;
         throw new Error(detail);
       }
 
-      setResume(data.resume_markdown || "");
+      setHtml(data.resume_html || "");
+      setMarkdown(data.resume_markdown || "");
       setAgentLog(data.agent_log || []);
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Failed to generate resume";
-      setError(message);
+      setError(err instanceof Error ? err.message : "Failed to generate");
     } finally {
       setLoading(false);
     }
@@ -83,7 +85,7 @@ export default function App() {
           )}
           {agentLog.length > 0 && <AgentStatus log={agentLog} />}
         </div>
-        <ResumePreview markdown={resume} loading={loading} />
+        <ResumePreview html={html} markdown={markdown} loading={loading} />
       </main>
     </div>
   );
