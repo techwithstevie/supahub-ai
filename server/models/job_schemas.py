@@ -27,10 +27,14 @@ class JobSource(str, Enum):
 
 class HiringTeamMember(BaseModel):
     name: str = "N/A"
-    title: str = "N/A"
+    title: str = "N/A"  # full headline under the name on LinkedIn
+    headline: str = ""  # alias / full subtitle line (same as title when parsed)
+    company: str = ""
+    email: str = ""
+    phone: str = ""
     profile_url: str = ""
-    connection_degree: str = ""  # e.g. "1st", "2nd"
-    extra: str = ""  # any other shown detail
+    connection_degree: str = ""
+    extra: str = ""  # any remaining detail not classified
 
 
 class LinkedInJobDetails(BaseModel):
@@ -160,3 +164,7 @@ class ParseJobUrlResponse(BaseModel):
     warnings: list[str] = Field(default_factory=list)
     linkedin_details: LinkedInJobDetails = Field(default_factory=LinkedInJobDetails)
     raw: dict[str, Any] = Field(default_factory=dict)
+
+class ParseJobTextRequest(BaseModel):
+    text: str
+    job_url: str = ""

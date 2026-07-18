@@ -13,7 +13,11 @@ export type JobSource = "linkedin" | "other";
 
 export type HiringTeamMember = {
     name: string;
-    title: string;
+    title: string; // full subtitle under the name (company | role | email | phone)
+    headline: string;
+    company: string;
+    email: string;
+    phone: string;
     profile_url: string;
     connection_degree: string;
     extra: string;

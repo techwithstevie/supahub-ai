@@ -25,6 +25,42 @@ function createEmptyDetails(): LinkedInJobDetails {
     };
 }
 
+function normalizeMember(
+    p: Partial<HiringTeamMember> | null | undefined
+): HiringTeamMember {
+    return {
+        name: p?.name || "N/A",
+        title: p?.title || p?.headline || "N/A",
+        headline: p?.headline || p?.title || "",
+        company: p?.company || "",
+        email: p?.email || "",
+        phone: p?.phone || "",
+        profile_url: p?.profile_url || "",
+        connection_degree: p?.connection_degree || "",
+        extra: p?.extra || "",
+    };
+}
+
+function normalizeDetails(
+    ld: Partial<LinkedInJobDetails> | null | undefined
+): LinkedInJobDetails {
+    const base = createEmptyDetails();
+    if (!ld) return base;
+    return {
+        compensation: ld.compensation || "N/A",
+        location: ld.location || "N/A",
+        primary_responsibilities: ld.primary_responsibilities || "N/A",
+        candidate_qualifications: ld.candidate_qualifications || "N/A",
+        why_join: ld.why_join || "N/A",
+        about_company: ld.about_company || "N/A",
+        benefits: ld.benefits || "N/A",
+        requirements_added_by_poster: ld.requirements_added_by_poster || "N/A",
+        hiring_team: Array.isArray(ld.hiring_team)
+            ? ld.hiring_team.map((m) => normalizeMember(m))
+            : [],
+    };
+}
+
 function formatWhen(iso: string): string {
     if (!iso) return "now";
     const d = new Date(iso);
@@ -45,24 +81,18 @@ function Section({ title, body }: { title: string; body: string }) {
             <div className="text-[11px] uppercase tracking-wide text-slate-400 mb-1">
                 {title}
             </div>
-            <div className="text-xs text-slate-200 whitespace-pre-wrap leading-relaxed max-h-40 overflow-y-auto">
+            <div className="text-xs text-slate-200 whitespace-pre-wrap break-words leading-relaxed">
                 {text}
             </div>
         </div>
     );
 }
 
-function hiringTeamOrNa(team: HiringTeamMember[] | undefined): HiringTeamMember[] {
+function hiringTeamOrNa(
+    team: HiringTeamMember[] | undefined
+): HiringTeamMember[] {
     if (team && team.length > 0) return team;
-    return [
-        {
-            name: "N/A",
-            title: "N/A",
-            profile_url: "",
-            connection_degree: "",
-            extra: "",
-        },
-    ];
+    return [normalizeMember({ name: "N/A", title: "N/A", headline: "N/A" })];
 }
 
 export default function JobForm({ onCreate }: Props) {
@@ -89,7 +119,8 @@ export default function JobForm({ onCreate }: Props) {
         "Senior Software Engineer"
     );
     const [rejectionReason, setRejectionReason] = useState("");
-    const [details, setDetails] = useState<LinkedInJobDetails>(createEmptyDetails);
+    const [details, setDetails] =
+        useState<LinkedInJobDetails>(createEmptyDetails);
     const [unlocked, setUnlocked] = useState(false);
 
     const filled = useMemo(
@@ -100,7 +131,7 @@ export default function JobForm({ onCreate }: Props) {
     const people = hiringTeamOrNa(details.hiring_team);
 
     const applyParsed = (data: ParsedJobUrl) => {
-        const ld = data.linkedin_details ?? createEmptyDetails();
+        const ld = normalizeDetails(data.linkedin_details);
         setJobUrl(data.job_url || url.trim());
         setCompany(data.company || "");
         setRoleTitle(data.role_title || "");
@@ -114,17 +145,7 @@ export default function JobForm({ onCreate }: Props) {
             typeof data.confidence === "number" ? data.confidence : null
         );
         setWarnings(Array.isArray(data.warnings) ? data.warnings : []);
-        setDetails({
-            compensation: ld.compensation || "N/A",
-            location: ld.location || "N/A",
-            primary_responsibilities: ld.primary_responsibilities || "N/A",
-            candidate_qualifications: ld.candidate_qualifications || "N/A",
-            why_join: ld.why_join || "N/A",
-            about_company: ld.about_company || "N/A",
-            benefits: ld.benefits || "N/A",
-            requirements_added_by_poster: ld.requirements_added_by_poster || "N/A",
-            hiring_team: Array.isArray(ld.hiring_team) ? ld.hiring_team : [],
-        });
+        setDetails(ld);
         if (data.role_title) {
             setResumeTargetRole(data.role_title);
         }
@@ -354,33 +375,56 @@ export default function JobForm({ onCreate }: Props) {
                                 Meet the hiring team
                             </div>
                             <div className="space-y-2">
-                                {people.map((p, i) => (
-                                    <div
-                                        key={`${p.name}-${i}`}
-                                        className="text-xs text-slate-200 border border-slate-700 rounded-lg px-2.5 py-2"
-                                    >
-                                        <div className="font-medium text-slate-100">
-                                            {p.name || "N/A"}
+                                {people.map((p, i) => {
+                                    const headline =
+                                        (p.headline && p.headline.trim()) ||
+                                        (p.title && p.title.trim()) ||
+                                        "N/A";
+                                    return (
+                                        <div
+                                            key={`${p.name}-${i}`}
+                                            className="text-xs text-slate-200 border border-slate-700 rounded-lg px-2.5 py-2"
+                                        >
+                                            <div className="font-medium text-slate-100">
+                                                {p.name || "N/A"}
+                                            </div>
+                                            {p.connection_degree ? (
+                                                <div className="text-slate-500 mt-0.5">
+                                                    {p.connection_degree}
+                                                </div>
+                                            ) : null}
+                                            <div className="text-slate-300 mt-1 whitespace-pre-wrap break-words leading-relaxed">
+                                                {headline}
+                                            </div>
+                                            {p.email ? (
+                                                <a
+                                                    href={`mailto:${p.email}`}
+                                                    className="text-blue-400 hover:underline mt-1 block break-all"
+                                                >
+                                                    {p.email}
+                                                </a>
+                                            ) : null}
+                                            {p.phone ? (
+                                                <a
+                                                    href={`tel:${p.phone.replace(/[^\d+]/g, "")}`}
+                                                    className="text-blue-400 hover:underline block"
+                                                >
+                                                    {p.phone}
+                                                </a>
+                                            ) : null}
+                                            {p.profile_url ? (
+                                                <a
+                                                    href={p.profile_url}
+                                                    target="_blank"
+                                                    rel="noreferrer"
+                                                    className="text-blue-400 hover:underline mt-1 inline-block"
+                                                >
+                                                    Profile
+                                                </a>
+                                            ) : null}
                                         </div>
-                                        <div className="text-slate-400">{p.title || "N/A"}</div>
-                                        {p.connection_degree ? (
-                                            <div className="text-slate-500">{p.connection_degree}</div>
-                                        ) : null}
-                                        {p.extra ? (
-                                            <div className="text-slate-500">{p.extra}</div>
-                                        ) : null}
-                                        {p.profile_url ? (
-                                            <a
-                                                href={p.profile_url}
-                                                target="_blank"
-                                                rel="noreferrer"
-                                                className="text-blue-400 hover:underline"
-                                            >
-                                                Profile
-                                            </a>
-                                        ) : null}
-                                    </div>
-                                ))}
+                                    );
+                                })}
                             </div>
                         </div>
                     </div>

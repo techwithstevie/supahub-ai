@@ -20,6 +20,7 @@ from models.job_schemas import (
     JobMetricsResponse,
     ParseJobUrlRequest,
     ParseJobUrlResponse,
+    ParseJobTextRequest,
 )
 
 from models.schemas import (
@@ -33,7 +34,7 @@ from models.schemas import (
 from utils import job_store
 from utils.github_fetcher import fetch_user_repos
 from utils.resume_template import render_html, render_markdown
-from utils.job_url_parser import parse_job_url
+from utils.job_url_parser import parse_job_url, parse_linkedin_plain_text
 
 app = FastAPI(title="SupaHub AI")
 
@@ -232,3 +233,10 @@ async def parse_job_posting_url(payload: ParseJobUrlRequest) -> ParseJobUrlRespo
             status_code=502,
             detail=f"Failed to parse job URL: {exc}",
         ) from exc
+    
+@app.post("/jobs/parse-text", response_model=ParseJobUrlResponse)
+async def parse_job_posting_text(payload: ParseJobTextRequest) -> ParseJobUrlResponse:
+    text = (payload.text or "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="text is required")
+    return parse_linkedin_plain_text(text, job_url=payload.job_url or "")
