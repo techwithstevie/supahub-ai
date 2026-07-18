@@ -1,6 +1,6 @@
 from langgraph.graph import StateGraph, END
-from langchain_ollama import OllamaLLM
-from typing import TypedDict
+from langchain_community.llms import OllamaLLM
+from typing_extensions import TypedDict
 import json
 
 llm = OllamaLLM(model="llama3.1", base_url="http://localhost:11434")
